@@ -1,17 +1,32 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from django.contrib.auth.models import User
 from .models import Message, Group, GroupMessage
 from .serializers import UserSerializer, MessageSerializer, GroupSerializer, GroupMessageSerializer
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 
-# Users
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+# ------------------ USER ------------------
+# Read and create users safely
+class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]  # Anyone can register; login is separate
 
-# Private Messages
+# Registration endpoint
+@api_view(['POST'])
+def register_user(request):
+    username = request.data.get("username")
+    password = request.data.get("password")
+
+    if not username or not password:
+        return Response({"error": "Username and password required"}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username=username).exists():
+        return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.create_user(username=username, password=password)
+    return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
+
+# ------------------ PRIVATE MESSAGES ------------------
 class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all().order_by('-timestamp')
     serializer_class = MessageSerializer
@@ -20,7 +35,6 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
 
-    # List messages between two users
     @action(detail=False, methods=['get'])
     def conversation(self, request):
         other_user_id = request.query_params.get('user_id')
@@ -35,13 +49,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(msgs, many=True)
         return Response(serializer.data)
 
-# Groups
+# ------------------ GROUPS ------------------
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-# Group Messages
 class GroupMessageViewSet(viewsets.ModelViewSet):
     queryset = GroupMessage.objects.all().order_by('timestamp')
     serializer_class = GroupMessageSerializer

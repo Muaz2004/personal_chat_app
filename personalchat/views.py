@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, serializers
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from rest_framework.decorators import action, api_view, permission_classes
@@ -20,7 +20,7 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]
 
 
-# ✅ Register user (final)
+# ✅ Register user
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 def register_user(request):
@@ -51,7 +51,7 @@ def register_user(request):
     )
 
 
-# ✅ Login user (final)
+# ✅ Login user
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 def login_user(request):
@@ -89,7 +89,10 @@ class MessageViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
-        serializer.save(sender=self.request.user)
+        receiver_id = self.request.data.get("receiver")
+        if not receiver_id:
+            raise serializers.ValidationError({"receiver": "This field is required."})
+        serializer.save(sender=self.request.user, receiver_id=receiver_id)
 
     @action(detail=False, methods=["get"])
     def conversation(self, request):

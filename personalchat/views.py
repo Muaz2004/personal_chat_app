@@ -4,23 +4,27 @@ from django.contrib.auth import authenticate
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
-
-from .models import Message, Group, GroupMessage
+from .models import Message, Group, GroupMessage, Profile
 from .serializers import (
     UserSerializer,
     MessageSerializer,
     GroupSerializer,
     GroupMessageSerializer,
+    ProfileSerializer
 )
 
 # ------------------ USER ------------------
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
 
-# ✅ Register user
+# Register user
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 def register_user(request):
@@ -28,30 +32,20 @@ def register_user(request):
     password = request.data.get("password")
 
     if not username or not password:
-        return Response(
-            {"error": "Username and password are required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return Response({"error": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(username=username).exists():
-        return Response(
-            {"error": "Username already exists"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
 
     user = User.objects.create_user(username=username, password=password)
     token, _ = Token.objects.get_or_create(user=user)
-    return Response(
-        {
-            "message": "Registration successful",
-            "username": user.username,
-            "token": token.key,
-        },
-        status=status.HTTP_201_CREATED,
-    )
+    return Response({
+        "message": "Registration successful",
+        "username": user.username,
+        "token": token.key,
+    }, status=status.HTTP_201_CREATED)
 
-
-# ✅ Login user (updated with avatar)
+# Login user (with avatar)
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 def login_user(request):
@@ -59,35 +53,24 @@ def login_user(request):
     password = request.data.get("password")
 
     if not username or not password:
-        return Response(
-            {"error": "Username and password are required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return Response({"error": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
 
     user = authenticate(username=username, password=password)
     if user:
         token, _ = Token.objects.get_or_create(user=user)
 
-        # Get the profile avatar
-        from .models import Profile
+        # Get full avatar URL
         profile = Profile.objects.filter(user=user).first()
-        avatar_url = profile.avatar.url if profile and profile.avatar else ""
+        avatar_url = request.build_absolute_uri(profile.avatar.url) if profile and profile.avatar else ""
 
-        return Response(
-            {
-                "message": "Login successful",
-                "username": user.username,
-                "token": token.key,
-                "avatar": avatar_url,  # <-- send avatar URL here
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({
+            "message": "Login successful",
+            "username": user.username,
+            "token": token.key,
+            "avatar": avatar_url,
+        }, status=status.HTTP_200_OK)
 
-    return Response(
-        {"error": "Invalid username or password"},
-        status=status.HTTP_401_UNAUTHORIZED,
-    )
-
+    return Response({"error": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
 
 # ------------------ PRIVATE MESSAGES ------------------
 class MessageViewSet(viewsets.ModelViewSet):
@@ -107,22 +90,17 @@ class MessageViewSet(viewsets.ModelViewSet):
         if not other_user_id:
             return Response({"error": "user_id query param required"}, status=400)
 
-        msgs = Message.objects.filter(
-            sender__id=request.user.id, receiver__id=other_user_id
-        ) | Message.objects.filter(
-            sender__id=other_user_id, receiver__id=request.user.id
-        )
+        msgs = Message.objects.filter(sender__id=request.user.id, receiver__id=other_user_id) | \
+               Message.objects.filter(sender__id=other_user_id, receiver__id=request.user.id)
         msgs = msgs.order_by("timestamp")
         serializer = self.get_serializer(msgs, many=True)
         return Response(serializer.data)
-
 
 # ------------------ GROUPS ------------------
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
-
 
 class GroupMessageViewSet(viewsets.ModelViewSet):
     queryset = GroupMessage.objects.all().order_by("timestamp")
@@ -132,18 +110,16 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
 
-
-
-#provile view
-from rest_framework import viewsets, permissions
-from .models import Profile
-from .serializers import ProfileSerializer
-
+# ------------------ PROFILE ------------------
 class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    # Optionally return only the current user profile
     def get_queryset(self):
         return Profile.objects.all()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context

@@ -4,17 +4,33 @@ from .models import Message, Group, GroupMessage, Profile
 
 # User serializer
 class UserSerializer(serializers.ModelSerializer):
+    avatar = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'username']
+        fields = ['id', 'username', 'avatar']
 
-# Profile serializer (new)
+    def get_avatar(self, obj):
+        request = self.context.get("request")
+        profile = getattr(obj, "profile", None) or Profile.objects.filter(user=obj).first()
+        if profile and profile.avatar:
+            return request.build_absolute_uri(profile.avatar.url) if request else profile.avatar.url
+        return ""
+
+# Profile serializer
 class ProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
         fields = ['username', 'avatar']
+
+    def get_avatar(self, obj):
+        request = self.context.get("request")
+        if obj.avatar:
+            return request.build_absolute_uri(obj.avatar.url) if request else obj.avatar.url
+        return ""
 
 # Private message serializer
 class MessageSerializer(serializers.ModelSerializer):
@@ -41,4 +57,3 @@ class GroupMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = GroupMessage
         fields = ['id', 'group', 'sender', 'content', 'timestamp']
-

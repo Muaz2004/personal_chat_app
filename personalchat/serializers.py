@@ -1,12 +1,20 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Message, Group, GroupMessage
+from .models import Message, Group, GroupMessage, Profile
 
 # User serializer
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username']
+
+# Profile serializer (new)
+class ProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = ['username', 'avatar']
 
 # Private message serializer
 class MessageSerializer(serializers.ModelSerializer):
@@ -33,3 +41,4 @@ class GroupMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = GroupMessage
         fields = ['id', 'group', 'sender', 'content', 'timestamp']
+

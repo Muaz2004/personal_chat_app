@@ -51,7 +51,7 @@ def register_user(request):
     )
 
 
-# ✅ Login user
+# ✅ Login user (updated with avatar)
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 def login_user(request):
@@ -67,11 +67,18 @@ def login_user(request):
     user = authenticate(username=username, password=password)
     if user:
         token, _ = Token.objects.get_or_create(user=user)
+
+        # Get the profile avatar
+        from .models import Profile
+        profile = Profile.objects.filter(user=user).first()
+        avatar_url = profile.avatar.url if profile and profile.avatar else ""
+
         return Response(
             {
                 "message": "Login successful",
                 "username": user.username,
                 "token": token.key,
+                "avatar": avatar_url,  # <-- send avatar URL here
             },
             status=status.HTTP_200_OK,
         )
@@ -124,3 +131,19 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
+
+
+
+#provile view
+from rest_framework import viewsets, permissions
+from .models import Profile
+from .serializers import ProfileSerializer
+
+class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Profile.objects.all()
+    serializer_class = ProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    # Optionally return only the current user profile
+    def get_queryset(self):
+        return Profile.objects.all()

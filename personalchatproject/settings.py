@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'personalchat',
+    'rest_framework.authtoken',
 ]
 
 MIDDLEWARE = [
@@ -87,8 +88,12 @@ CORS_ALLOW_ALL_ORIGINS = True  # OK for dev
 # ]
 
 # REST Framework settings
+
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
 }

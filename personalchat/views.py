@@ -1,8 +1,9 @@
 from rest_framework import viewsets, permissions, status
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.authtoken.models import Token
 
 from .models import Message, Group, GroupMessage
 from .serializers import (
@@ -16,11 +17,12 @@ from .serializers import (
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.AllowAny]  # Anyone can register; login is separate
+    permission_classes = [permissions.AllowAny]
 
 
-# ✅ Registration endpoint (improved)
+# ✅ Register user (final)
 @api_view(["POST"])
+@permission_classes([permissions.AllowAny])
 def register_user(request):
     username = request.data.get("username")
     password = request.data.get("password")
@@ -37,15 +39,21 @@ def register_user(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    User.objects.create_user(username=username, password=password)
+    user = User.objects.create_user(username=username, password=password)
+    token, _ = Token.objects.get_or_create(user=user)
     return Response(
-        {"message": "User registered successfully"},
+        {
+            "message": "Registration successful",
+            "username": user.username,
+            "token": token.key,
+        },
         status=status.HTTP_201_CREATED,
     )
 
 
-# ✅ Login endpoint (NEW)
+# ✅ Login user (final)
 @api_view(["POST"])
+@permission_classes([permissions.AllowAny])
 def login_user(request):
     username = request.data.get("username")
     password = request.data.get("password")
@@ -57,16 +65,21 @@ def login_user(request):
         )
 
     user = authenticate(username=username, password=password)
-    if user is not None:
+    if user:
+        token, _ = Token.objects.get_or_create(user=user)
         return Response(
-            {"message": "Login successful", "username": username},
+            {
+                "message": "Login successful",
+                "username": user.username,
+                "token": token.key,
+            },
             status=status.HTTP_200_OK,
         )
-    else:
-        return Response(
-            {"error": "Invalid username or password"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+
+    return Response(
+        {"error": "Invalid username or password"},
+        status=status.HTTP_401_UNAUTHORIZED,
+    )
 
 
 # ------------------ PRIVATE MESSAGES ------------------

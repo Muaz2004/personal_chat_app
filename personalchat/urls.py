@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    UpdateAvatarView,
     UserViewSet,
     MessageViewSet,
     GroupViewSet,
@@ -22,5 +23,6 @@ urlpatterns = [
     path('api/register/', register_user, name='register_user'),
     path('api/login/', login_user, name='login_user'),
     path('api/', include(router.urls)),
+    path('api/profile/avatar/', UpdateAvatarView.as_view(), name='update_avatar'),
     #path('test-profile/', test_profile_api, name='test_profile_api'),
 ]

@@ -123,3 +123,21 @@ class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         context.update({"request": self.request})
         return context
+
+
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.views import APIView
+
+class UpdateAvatarView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def patch(self, request, *args, **kwargs):
+        profile, created = Profile.objects.get_or_create(user=request.user)
+        avatar_file = request.FILES.get('avatar')
+        if not avatar_file:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+        profile.avatar = avatar_file
+        profile.save()
+        avatar_url = request.build_absolute_uri(profile.avatar.url)
+        return Response({"avatar": avatar_url}, status=status.HTTP_200_OK)

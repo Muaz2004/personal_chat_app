@@ -12,6 +12,8 @@ from .serializers import (
     GroupMessageSerializer,
     ProfileSerializer
 )
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.views import APIView
 
 # ------------------ USER ------------------
 class UserViewSet(viewsets.ModelViewSet):
@@ -23,6 +25,7 @@ class UserViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context.update({"request": self.request})
         return context
+
 
 # Register user
 @api_view(["POST"])
@@ -44,6 +47,7 @@ def register_user(request):
         "username": user.username,
         "token": token.key,
     }, status=status.HTTP_201_CREATED)
+
 
 # Login user (with avatar)
 @api_view(["POST"])
@@ -72,6 +76,7 @@ def login_user(request):
 
     return Response({"error": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
 
+
 # ------------------ PRIVATE MESSAGES ------------------
 class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all().order_by("-timestamp")
@@ -90,17 +95,38 @@ class MessageViewSet(viewsets.ModelViewSet):
         if not other_user_id:
             return Response({"error": "user_id query param required"}, status=400)
 
+        # All messages between the two users
         msgs = Message.objects.filter(sender__id=request.user.id, receiver__id=other_user_id) | \
                Message.objects.filter(sender__id=other_user_id, receiver__id=request.user.id)
         msgs = msgs.order_by("timestamp")
+
+        # Mark unread messages as read when conversation is opened
+        msgs.filter(receiver=request.user, read=False).update(read=True)
+
         serializer = self.get_serializer(msgs, many=True)
         return Response(serializer.data)
+
+
+# ------------------ NEW ENDPOINT: UNREAD COUNTS ------------------
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def unread_counts(request):
+    """
+    Returns unread message counts per sender for the current user.
+    """
+    msgs = Message.objects.filter(receiver=request.user, read=False)
+    counts = {}
+    for m in msgs:
+        counts[m.sender.id] = counts.get(m.sender.id, 0) + 1
+    return Response(counts)
+
 
 # ------------------ GROUPS ------------------
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
+
 
 class GroupMessageViewSet(viewsets.ModelViewSet):
     queryset = GroupMessage.objects.all().order_by("timestamp")
@@ -109,6 +135,7 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
+
 
 # ------------------ PROFILE ------------------
 class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
@@ -124,9 +151,6 @@ class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
         context.update({"request": self.request})
         return context
 
-
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.views import APIView
 
 class UpdateAvatarView(APIView):
     permission_classes = [permissions.IsAuthenticated]

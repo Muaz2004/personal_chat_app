@@ -10,6 +10,7 @@ from .views import (
     ProfileViewSet,   # <-- added
     register_user,
     login_user,
+    unread_counts,
 )
 
 router = DefaultRouter()
@@ -22,7 +23,9 @@ router.register(r'profiles', ProfileViewSet, basename='profile')  # <-- added
 urlpatterns = [
     path('api/register/', register_user, name='register_user'),
     path('api/login/', login_user, name='login_user'),
-    path('api/', include(router.urls)),
+   
     path('api/profile/avatar/', UpdateAvatarView.as_view(), name='update_avatar'),
+    path('api/messages/unread_counts/', unread_counts, name='unread-counts'),
     #path('test-profile/', test_profile_api, name='test_profile_api'),
+    path('api/', include(router.urls)),
 ]

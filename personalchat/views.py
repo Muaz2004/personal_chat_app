@@ -203,7 +203,9 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
+        # Make sure sender is set correctly
         serializer.save(sender=self.request.user)
+
 
 
 # ------------------ PROFILE ------------------

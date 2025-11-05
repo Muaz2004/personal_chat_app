@@ -51,10 +51,13 @@ class GroupSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'members', 'created_at','creator']
 
 # Group message serializer
+# Group message serializer
 class GroupMessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
-    group = GroupSerializer(read_only=True)
+    # Accept group ID when creating, but serialize full group info when reading
+    group = serializers.PrimaryKeyRelatedField(queryset=Group.objects.all(), write_only=True)
+    group_info = GroupSerializer(source='group', read_only=True)
 
     class Meta:
         model = GroupMessage
-        fields = ['id', 'group', 'sender', 'content', 'timestamp']
+        fields = ['id', 'group', 'group_info', 'sender', 'content', 'timestamp']

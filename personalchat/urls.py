@@ -7,7 +7,8 @@ from .views import (
     MessageViewSet,
     GroupViewSet,
     GroupMessageViewSet,
-    ProfileViewSet,   # <-- added
+    ProfileViewSet,
+    group_unread_counts,   # <-- added
     register_user,
     login_user,
     unread_counts,
@@ -26,6 +27,7 @@ urlpatterns = [
    
     path('api/profile/avatar/', UpdateAvatarView.as_view(), name='update_avatar'),
     path('api/messages/unread_counts/', unread_counts, name='unread-counts'),
+    path('api/group-messages/unread_counts/', group_unread_counts, name='group-unread-counts'),
     #path('test-profile/', test_profile_api, name='test_profile_api'),
     path('api/', include(router.urls)),
 ]

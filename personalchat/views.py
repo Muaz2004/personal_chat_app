@@ -112,13 +112,17 @@ class MessageViewSet(viewsets.ModelViewSet):
 @permission_classes([permissions.IsAuthenticated])
 def unread_counts(request):
     """
-    Returns unread message counts per sender for the current user.
+    Returns unread message counts per sender for private messages.
     """
-    msgs = Message.objects.filter(receiver=request.user, read=False)
-    counts = {}
-    for m in msgs:
-        counts[m.sender.id] = counts.get(m.sender.id, 0) + 1
-    return Response(counts)
+    user = request.user
+    private_msgs = Message.objects.filter(receiver=user, read=False)
+    
+    unread_data = {}
+    for msg in private_msgs:
+        sender_id = msg.sender.id
+        unread_data[sender_id] = unread_data.get(sender_id, 0) + 1
+
+    return Response(unread_data)
 
 
 # ------------------ GROUPS ------------------
@@ -132,9 +136,13 @@ class GroupViewSet(viewsets.ModelViewSet):
         return Group.objects.filter(members=self.request.user)
 
     def perform_create(self, serializer):
-        # The creator automatically becomes a member too
+    # Save the group with the creator
         group = serializer.save(creator=self.request.user)
         group.members.add(self.request.user)
+    
+    # Ensure the creator's own messages (if any) are marked as read
+        GroupMessage.objects.filter(group=group, sender=self.request.user).update(read=True)
+
 
     # --- Add member (creator only)
     @action(detail=True, methods=["post"])
@@ -202,8 +210,18 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
     serializer_class = GroupMessageSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        group_id = self.request.query_params.get("group_id")
+        if group_id:
+            qs = GroupMessage.objects.filter(group__id=group_id).order_by("timestamp")
+            
+            # Mark unread messages as read for the current user (exclude sender)
+            qs.filter(read=False).exclude(sender=self.request.user).update(read=True)
+            
+            return qs
+        return super().get_queryset()
+
     def perform_create(self, serializer):
-        # Make sure sender is set correctly
         serializer.save(sender=self.request.user)
 
 
@@ -237,3 +255,23 @@ class UpdateAvatarView(APIView):
         profile.save()
         avatar_url = request.build_absolute_uri(profile.avatar.url)
         return Response({"avatar": avatar_url}, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def group_unread_counts(request):
+    """
+    Returns unread message counts for each group the user belongs to.
+    """
+    user = request.user
+    groups = Group.objects.filter(members=user)
+    unread_data = {}
+
+    for group in groups:
+        count = GroupMessage.objects.filter(
+            group=group,
+            read=False
+        ).exclude(sender=user).count()
+        unread_data[group.id] = count
+
+    return Response(unread_data)

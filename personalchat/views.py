@@ -107,7 +107,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-# ------------------ NEW ENDPOINT: UNREAD COUNTS ------------------
+# ------------------ UNREAD COUNTS ------------------
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def unread_counts(request):
@@ -127,7 +127,76 @@ class GroupViewSet(viewsets.ModelViewSet):
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        # Only show groups the current user belongs to
+        return Group.objects.filter(members=self.request.user)
 
+    def perform_create(self, serializer):
+        # The creator automatically becomes a member too
+        group = serializer.save(creator=self.request.user)
+        group.members.add(self.request.user)
+
+    # --- Add member (creator only)
+    @action(detail=True, methods=["post"])
+    def add_member(self, request, pk=None):
+        group = self.get_object()
+        if group.creator != request.user:
+            return Response({"error": "Only the group creator can add members."},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"error": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        group.members.add(user)
+        return Response({"message": f"{user.username} added to the group."}, status=status.HTTP_200_OK)
+
+    # --- Remove member (creator only)
+    @action(detail=True, methods=["post"])
+    def remove_member(self, request, pk=None):
+        group = self.get_object()
+        if group.creator != request.user:
+            return Response({"error": "Only the group creator can remove members."},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"error": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        group.members.remove(user)
+        return Response({"message": f"{user.username} removed from the group."}, status=status.HTTP_200_OK)
+
+    # --- Leave group (any member)
+    @action(detail=True, methods=["post"])
+    def leave_group(self, request, pk=None):
+        group = self.get_object()
+        user = request.user
+
+        if user not in group.members.all():
+            return Response({"error": "You are not a member of this group."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Optional rule: prevent creator from leaving if they’re the only member left
+        if user == group.creator and group.members.count() == 1:
+            return Response({"error": "You cannot leave the group as its only member."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        group.members.remove(user)
+        return Response({"message": f"{user.username} left the group."},
+                        status=status.HTTP_200_OK)
+
+
+# ------------------ GROUP MESSAGES ------------------
 class GroupMessageViewSet(viewsets.ModelViewSet):
     queryset = GroupMessage.objects.all().order_by("timestamp")
     serializer_class = GroupMessageSerializer
@@ -152,6 +221,7 @@ class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
         return context
 
 
+# ------------------ UPDATE AVATAR ------------------
 class UpdateAvatarView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]

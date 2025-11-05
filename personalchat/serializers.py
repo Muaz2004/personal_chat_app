@@ -44,10 +44,11 @@ class MessageSerializer(serializers.ModelSerializer):
 # Group serializer
 class GroupSerializer(serializers.ModelSerializer):
     members = UserSerializer(many=True, read_only=True)
+    creator = UserSerializer(read_only=True)
 
     class Meta:
         model = Group
-        fields = ['id', 'name', 'members', 'created_at']
+        fields = ['id', 'name', 'members', 'created_at','creator']
 
 # Group message serializer
 class GroupMessageSerializer(serializers.ModelSerializer):

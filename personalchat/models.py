@@ -23,11 +23,13 @@ class Message(models.Model):
 # Optional Group Chat
 class Group(models.Model):
     name = models.CharField(max_length=100)
+    creator = models.ForeignKey(User, related_name='created_groups', on_delete=models.CASCADE,null=True)
     members = models.ManyToManyField(
         User, 
         related_name='chat_groups'   # <-- change this from 'groups' to something unique
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
 
     def __str__(self):
         return self.name

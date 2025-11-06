@@ -121,6 +121,7 @@ def unread_counts(request):
 
 
 # ------------------ GROUPS ------------------
+# ------------------ GROUPS ------------------
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
@@ -130,15 +131,18 @@ class GroupViewSet(viewsets.ModelViewSet):
         return Group.objects.filter(members=self.request.user)
 
     def perform_create(self, serializer):
-        group = serializer.save()
-        if not group.creator:
-            group.creator = self.request.user
-            group.save()
-        # Ensure creator is always a member
-        group.members.add(group.creator)
-        if self.request.user not in group.members.all():
-            group.members.add(self.request.user)
-        GroupMessage.objects.filter(group=group, sender=self.request.user).update(read=True)
+        # Save the group with the creator
+        group = serializer.save(creator=self.request.user)
+
+        # Always add creator as a member
+        group.members.add(self.request.user)
+
+        # Add additional members sent from frontend
+        members_usernames = self.request.data.get("members", [])
+        if members_usernames:
+            users_to_add = User.objects.filter(username__in=members_usernames)
+            for user in users_to_add:
+                group.members.add(user)
 
     @action(detail=True, methods=["post"])
     def add_member(self, request, pk=None):
@@ -194,6 +198,7 @@ class GroupViewSet(viewsets.ModelViewSet):
 
         group.members.remove(user)
         return Response({"message": f"{user.username} left the group."}, status=status.HTTP_200_OK)
+
 
 
 # ------------------ GROUP MESSAGES ------------------

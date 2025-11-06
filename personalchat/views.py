@@ -95,12 +95,10 @@ class MessageViewSet(viewsets.ModelViewSet):
         if not other_user_id:
             return Response({"error": "user_id query param required"}, status=400)
 
-        # All messages between the two users
         msgs = Message.objects.filter(sender__id=request.user.id, receiver__id=other_user_id) | \
                Message.objects.filter(sender__id=other_user_id, receiver__id=request.user.id)
         msgs = msgs.order_by("timestamp")
 
-        # Mark unread messages as read when conversation is opened
         msgs.filter(receiver=request.user, read=False).update(read=True)
 
         serializer = self.get_serializer(msgs, many=True)
@@ -111,12 +109,9 @@ class MessageViewSet(viewsets.ModelViewSet):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def unread_counts(request):
-    """
-    Returns unread message counts per sender for private messages.
-    """
     user = request.user
     private_msgs = Message.objects.filter(receiver=user, read=False)
-    
+
     unread_data = {}
     for msg in private_msgs:
         sender_id = msg.sender.id
@@ -132,19 +127,19 @@ class GroupViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Only show groups the current user belongs to
         return Group.objects.filter(members=self.request.user)
 
     def perform_create(self, serializer):
-    # Save the group with the creator
-        group = serializer.save(creator=self.request.user)
-        group.members.add(self.request.user)
-    
-    # Ensure the creator's own messages (if any) are marked as read
+        group = serializer.save()
+        if not group.creator:
+            group.creator = self.request.user
+            group.save()
+        # Ensure creator is always a member
+        group.members.add(group.creator)
+        if self.request.user not in group.members.all():
+            group.members.add(self.request.user)
         GroupMessage.objects.filter(group=group, sender=self.request.user).update(read=True)
 
-
-    # --- Add member (creator only)
     @action(detail=True, methods=["post"])
     def add_member(self, request, pk=None):
         group = self.get_object()
@@ -164,7 +159,6 @@ class GroupViewSet(viewsets.ModelViewSet):
         group.members.add(user)
         return Response({"message": f"{user.username} added to the group."}, status=status.HTTP_200_OK)
 
-    # --- Remove member (creator only)
     @action(detail=True, methods=["post"])
     def remove_member(self, request, pk=None):
         group = self.get_object()
@@ -184,7 +178,6 @@ class GroupViewSet(viewsets.ModelViewSet):
         group.members.remove(user)
         return Response({"message": f"{user.username} removed from the group."}, status=status.HTTP_200_OK)
 
-    # --- Leave group (any member)
     @action(detail=True, methods=["post"])
     def leave_group(self, request, pk=None):
         group = self.get_object()
@@ -194,14 +187,13 @@ class GroupViewSet(viewsets.ModelViewSet):
             return Response({"error": "You are not a member of this group."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Optional rule: prevent creator from leaving if they’re the only member left
-        if user == group.creator and group.members.count() == 1:
-            return Response({"error": "You cannot leave the group as its only member."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        # Delete the group if creator leaves
+        if user == group.creator:
+            group.delete()
+            return Response({"message": "Group deleted as creator left."}, status=status.HTTP_200_OK)
 
         group.members.remove(user)
-        return Response({"message": f"{user.username} left the group."},
-                        status=status.HTTP_200_OK)
+        return Response({"message": f"{user.username} left the group."}, status=status.HTTP_200_OK)
 
 
 # ------------------ GROUP MESSAGES ------------------
@@ -214,10 +206,7 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
         group_id = self.request.query_params.get("group_id")
         if group_id:
             qs = GroupMessage.objects.filter(group__id=group_id).order_by("timestamp")
-            
-            # Mark unread messages as read for the current user (exclude sender)
             qs.filter(read=False).exclude(sender=self.request.user).update(read=True)
-            
             return qs
         return super().get_queryset()
 
@@ -225,15 +214,11 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
         serializer.save(sender=self.request.user)
 
 
-
 # ------------------ PROFILE ------------------
 class ProfileViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Profile.objects.all()
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -260,18 +245,13 @@ class UpdateAvatarView(APIView):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def group_unread_counts(request):
-    """
-    Returns unread message counts for each group the user belongs to.
-    """
     user = request.user
     groups = Group.objects.filter(members=user)
     unread_data = {}
-
     for group in groups:
         count = GroupMessage.objects.filter(
             group=group,
             read=False
         ).exclude(sender=user).count()
         unread_data[group.id] = count
-
     return Response(unread_data)

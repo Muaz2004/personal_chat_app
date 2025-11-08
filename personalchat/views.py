@@ -63,7 +63,6 @@ def login_user(request):
     if user:
         token, _ = Token.objects.get_or_create(user=user)
 
-        # Get full avatar URL
         profile = Profile.objects.filter(user=user).first()
         avatar_url = request.build_absolute_uri(profile.avatar.url) if profile and profile.avatar else ""
 
@@ -121,7 +120,6 @@ def unread_counts(request):
 
 
 # ------------------ GROUPS ------------------
-# ------------------ GROUPS ------------------
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
@@ -131,13 +129,8 @@ class GroupViewSet(viewsets.ModelViewSet):
         return Group.objects.filter(members=self.request.user)
 
     def perform_create(self, serializer):
-        # Save the group with the creator
         group = serializer.save(creator=self.request.user)
-
-        # Always add creator as a member
         group.members.add(self.request.user)
-
-        # Add additional members sent from frontend
         members_usernames = self.request.data.get("members", [])
         if members_usernames:
             users_to_add = User.objects.filter(username__in=members_usernames)
@@ -191,14 +184,12 @@ class GroupViewSet(viewsets.ModelViewSet):
             return Response({"error": "You are not a member of this group."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Delete the group if creator leaves
         if user == group.creator:
             group.delete()
             return Response({"message": "Group deleted as creator left."}, status=status.HTTP_200_OK)
 
         group.members.remove(user)
         return Response({"message": f"{user.username} left the group."}, status=status.HTTP_200_OK)
-
 
 
 # ------------------ GROUP MESSAGES ------------------
@@ -211,7 +202,12 @@ class GroupMessageViewSet(viewsets.ModelViewSet):
         group_id = self.request.query_params.get("group_id")
         if group_id:
             qs = GroupMessage.objects.filter(group__id=group_id).order_by("timestamp")
-            qs.filter(read=False).exclude(sender=self.request.user).update(read=True)
+
+            # Mark unread messages as read for current user safely
+            unread_msgs = qs.exclude(sender=self.request.user).exclude(read_by=self.request.user)
+            for msg in unread_msgs:
+                msg.read_by.add(self.request.user)
+
             return qs
         return super().get_queryset()
 
@@ -255,8 +251,7 @@ def group_unread_counts(request):
     unread_data = {}
     for group in groups:
         count = GroupMessage.objects.filter(
-            group=group,
-            read=False
-        ).exclude(sender=user).count()
+            group=group
+        ).exclude(sender=user).exclude(read_by=user).count()  # only per-user unread
         unread_data[group.id] = count
     return Response(unread_data)

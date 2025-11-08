@@ -55,7 +55,13 @@ class GroupMessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
     group = serializers.PrimaryKeyRelatedField(queryset=Group.objects.all(), write_only=True)
     group_info = GroupSerializer(source='group', read_only=True)
+    read_by = serializers.SerializerMethodField()  # track who read the message
 
     class Meta:
         model = GroupMessage
-        fields = ['id', 'group', 'group_info', 'sender', 'content', 'timestamp', 'read']  # <-- Added read
+        fields = ['id', 'group', 'group_info', 'sender', 'content', 'timestamp', 'read_by']
+
+    def get_read_by(self, obj):
+        # Return list of user IDs who have read this message
+        return [user.id for user in obj.read_by.all()]
+

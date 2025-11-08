@@ -40,7 +40,7 @@ class GroupMessage(models.Model):
     sender = models.ForeignKey(User, related_name='group_messages', on_delete=models.CASCADE)
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    read = models.BooleanField(default=False)
+    read_by = models.ManyToManyField(User, related_name='read_group_messages', blank=True)
 
     def __str__(self):
         return f'{self.sender} -> {self.group.name}'
